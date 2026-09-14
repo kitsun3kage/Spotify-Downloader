@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { DownloadItem, DownloadStatus } from '../types/download'
+import type { DownloadItem } from '../types/download'
 import {
   addDownloadHistory,
   getDownloads,
   saveDownloads,
 } from '../services/storage'
-import {
-  downloadLegalFile,
-  type LegalDownloadOptions,
-} from '../services/downloads'
+import { downloadLegalFile } from '../services/downloads'
 
 export interface CreateDownloadOptions {
   id?: string
@@ -18,15 +15,20 @@ export interface CreateDownloadOptions {
   source: 'spotify' | 'url' | 'local'
   sourceUrl?: string
   format: 'mp3' | 'wav' | 'original'
-  quality?: '128kbps' | '192kbps' | '256kbps' | '320kbps' | 'lossless'
+  quality?:
+    | '128kbps'
+    | '192kbps'
+    | '256kbps'
+    | '320kbps'
+    | 'lossless'
   spotifyId?: string
   fileName?: string
 }
 
 export function useDownloads() {
-  const [downloads, setDownloads] = useState<DownloadItem[]>(() => {
-    return getDownloads()
-  })
+  const [downloads, setDownloads] = useState<DownloadItem[]>(
+    () => getDownloads(),
+  )
 
   useEffect(() => {
     saveDownloads(downloads)
@@ -38,13 +40,11 @@ export function useDownloads() {
         | DownloadItem[]
         | ((current: DownloadItem[]) => DownloadItem[]),
     ) => {
-      setDownloads((current) => {
-        if (typeof updater === 'function') {
-          return updater(current)
-        }
-
-        return updater
-      })
+      setDownloads((current) =>
+        typeof updater === 'function'
+          ? updater(current)
+          : updater,
+      )
     },
     [],
   )
@@ -68,11 +68,15 @@ export function useDownloads() {
       }
 
       setDownloads((current) => {
-        const existing = current.find((download) => download.id === item.id)
+        const exists = current.some(
+          (download) => download.id === item.id,
+        )
 
-        if (existing) {
+        if (exists) {
           return current.map((download) =>
-            download.id === item.id ? item : download,
+            download.id === item.id
+              ? item
+              : download,
           )
         }
 
@@ -87,22 +91,24 @@ export function useDownloads() {
   const startDownload = useCallback(
     async (item: DownloadItem): Promise<DownloadItem> => {
       if (!item.sourceUrl) {
-        const failed: DownloadItem = {
+        const failedItem: DownloadItem = {
           ...item,
           status: 'Failed',
           progress: 0,
-          error: 'Brak adresu URL pliku do pobrania.',
+          error: 'Brak adresu URL pliku.',
         }
 
         setDownloads((current) =>
           current.map((download) =>
-            download.id === item.id ? failed : download,
+            download.id === item.id
+              ? failedItem
+              : download,
           ),
         )
 
-        addDownloadHistory(failed)
+        addDownloadHistory(failedItem)
 
-        return failed
+        return failedItem
       }
 
       setDownloads((current) =>
@@ -110,7 +116,7 @@ export function useDownloads() {
           download.id === item.id
             ? {
                 ...download,
-                status: 'Downloading' as DownloadStatus,
+                status: 'Downloading',
                 progress: 0,
                 error: undefined,
               }
@@ -119,29 +125,26 @@ export function useDownloads() {
       )
 
       try {
-        const options: LegalDownloadOptions = {
-          url: item.sourceUrl,
-          fileName:
-            item.fileName ??
+        const result = await downloadLegalFile(
+          item.sourceUrl,
+          item.fileName ??
             `${item.artist ? `${item.artist} - ` : ''}${item.title}`,
-          onProgress: (progress: number) => {
+          (progress: number) => {
             setDownloads((current) =>
               current.map((download) =>
                 download.id === item.id
                   ? {
                       ...download,
-                      status: 'Downloading' as DownloadStatus,
+                      status: 'Downloading',
                       progress,
                     }
                   : download,
               ),
             )
           },
-        }
+        )
 
-        const result = await downloadLegalFile(options)
-
-        const completed: DownloadItem = {
+        const completedItem: DownloadItem = {
           ...item,
           status: 'Completed',
           progress: 100,
@@ -154,20 +157,22 @@ export function useDownloads() {
 
         setDownloads((current) =>
           current.map((download) =>
-            download.id === item.id ? completed : download,
+            download.id === item.id
+              ? completedItem
+              : download,
           ),
         )
 
-        addDownloadHistory(completed)
+        addDownloadHistory(completedItem)
 
-        return completed
+        return completedItem
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
             : 'Nie udało się pobrać pliku.'
 
-        const failed: DownloadItem = {
+        const failedItem: DownloadItem = {
           ...item,
           status: 'Failed',
           error: message,
@@ -175,13 +180,15 @@ export function useDownloads() {
 
         setDownloads((current) =>
           current.map((download) =>
-            download.id === item.id ? failed : download,
+            download.id === item.id
+              ? failedItem
+              : download,
           ),
         )
 
-        addDownloadHistory(failed)
+        addDownloadHistory(failedItem)
 
-        return failed
+        return failedItem
       }
     },
     [],
@@ -201,17 +208,12 @@ export function useDownloads() {
   }, [])
 
   const resumeDownload = useCallback(
-    async (id: string) => {
-      const item = getDownloads().find((download) => download.id === id)
+    async (id: string): Promise<void> => {
+      const item = downloads.find(
+        (download) => download.id === id,
+      )
 
       if (!item) {
-        const currentItem = downloads.find((download) => download.id === id)
-
-        if (!currentItem) {
-          return
-        }
-
-        await startDownload(currentItem)
         return
       }
 
@@ -235,19 +237,25 @@ export function useDownloads() {
 
   const removeDownload = useCallback((id: string) => {
     setDownloads((current) =>
-      current.filter((download) => download.id !== id),
+      current.filter(
+        (download) => download.id !== id,
+      ),
     )
   }, [])
 
   const clearCompleted = useCallback(() => {
     setDownloads((current) =>
-      current.filter((download) => download.status !== 'Completed'),
+      current.filter(
+        (download) => download.status !== 'Completed',
+      ),
     )
   }, [])
 
   const retryDownload = useCallback(
-    async (id: string) => {
-      const item = downloads.find((download) => download.id === id)
+    async (id: string): Promise<void> => {
+      const item = downloads.find(
+        (download) => download.id === id,
+      )
 
       if (!item) {
         return
@@ -264,7 +272,9 @@ export function useDownloads() {
 
       setDownloads((current) =>
         current.map((download) =>
-          download.id === id ? retryItem : download,
+          download.id === id
+            ? retryItem
+            : download,
         ),
       )
 
@@ -274,30 +284,26 @@ export function useDownloads() {
   )
 
   /*
-   * Compatibility aliases.
-   *
-   * App.tsx currently expects:
-   *   downloads.items
-   *   downloads.start()
-   *   downloads.cancel()
-   *
-   * The newer hook API uses:
-   *   downloads.downloads
-   *   downloads.startDownload()
-   *   downloads.cancelDownload()
-   *
-   * Both are exposed so the rest of the application compiles.
+   * Compatibility with the current App.tsx
    */
 
   const start = useCallback(
-    async (item: DownloadItem) => {
-      return startDownload(item)
+    (id: string): void => {
+      const item = downloads.find(
+        (download) => download.id === id,
+      )
+
+      if (!item) {
+        return
+      }
+
+      void startDownload(item)
     },
-    [startDownload],
+    [downloads, startDownload],
   )
 
   const cancel = useCallback(
-    (id: string) => {
+    (id: string): void => {
       cancelDownload(id)
     },
     [cancelDownload],
@@ -306,12 +312,12 @@ export function useDownloads() {
   return {
     downloads,
 
-    // Old App.tsx API
+    // API używane przez App.tsx
     items: downloads,
     start,
     cancel,
 
-    // Current API
+    // Pełne API
     addDownload,
     startDownload,
     pauseDownload,
