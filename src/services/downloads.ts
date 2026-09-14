@@ -1,8 +1,33 @@
 import type { DownloadItem } from '../types/download'
 import {
-  addToHistory,
-  saveDownloadHistory,
+  addDownloadHistory,
+  saveDownloads,
 } from './storage'
+
+function createBlobFromChunks(
+  chunks: Uint8Array[],
+  contentType: string,
+): Blob {
+  const totalLength = chunks.reduce(
+    (total, chunk) => total + chunk.byteLength,
+    0,
+  )
+
+  const merged = new ArrayBuffer(totalLength)
+
+  const output = new Uint8Array(merged)
+
+  let offset = 0
+
+  for (const chunk of chunks) {
+    output.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return new Blob([merged], {
+    type: contentType,
+  })
+}
 
 export async function downloadFromUrl(
   item: DownloadItem,
@@ -21,18 +46,19 @@ export async function downloadFromUrl(
     }
 
     update(failed)
+
     return failed
   }
 
   try {
-    const downloading: DownloadItem = {
+    let current: DownloadItem = {
       ...item,
       status: 'downloading',
       progress: 0,
       error: undefined,
     }
 
-    update(downloading)
+    update(current)
 
     const response = await fetch(url)
 
@@ -46,67 +72,64 @@ export async function downloadFromUrl(
       response.headers.get('content-type') ||
       'application/octet-stream'
 
-    const contentLength = Number(
-      response.headers.get('content-length') || 0,
-    )
+    const contentLengthHeader =
+      response.headers.get('content-length')
+
+    const contentLength = contentLengthHeader
+      ? Number(contentLengthHeader)
+      : 0
 
     let blob: Blob
 
     if (response.body) {
       const reader = response.body.getReader()
+
       const chunks: Uint8Array[] = []
 
       let received = 0
 
       while (true) {
-        const { done, value } = await reader.read()
+        const result = await reader.read()
 
-        if (done) {
+        if (result.done) {
           break
         }
 
-        if (value) {
-          chunks.push(value)
-          received += value.byteLength
+        const value = result.value
 
-          const progress = contentLength
+        if (!value) {
+          continue
+        }
+
+        const chunk = new Uint8Array(value)
+
+        chunks.push(chunk)
+
+        received += chunk.byteLength
+
+        const progress =
+          contentLength > 0
             ? Math.min(
                 100,
                 Math.round(
-                  (received / contentLength) * 100,
+                  (received / contentLength) *
+                    100,
                 ),
               )
             : 0
 
-          update({
-            ...downloading,
-            progress,
-          })
+        current = {
+          ...current,
+          progress,
         }
+
+        update(current)
       }
 
-      const totalLength = chunks.reduce(
-        (total, chunk) => total + chunk.byteLength,
-        0,
+      blob = createBlobFromChunks(
+        chunks,
+        contentType,
       )
-
-      const merged = new Uint8Array(totalLength)
-
-      let offset = 0
-
-      for (const chunk of chunks) {
-        merged.set(chunk, offset)
-        offset += chunk.byteLength
-      }
-
-      const buffer = merged.buffer.slice(
-        merged.byteOffset,
-        merged.byteOffset + merged.byteLength,
-      )
-
-      blob = new Blob([buffer], {
-        type: contentType,
-      })
     } else {
       blob = await response.blob()
     }
@@ -114,7 +137,7 @@ export async function downloadFromUrl(
     const blobUrl = URL.createObjectURL(blob)
 
     const completed: DownloadItem = {
-      ...downloading,
+      ...current,
       status: 'completed',
       progress: 100,
       blobUrl,
@@ -125,8 +148,8 @@ export async function downloadFromUrl(
 
     update(completed)
 
-    addToHistory(completed)
-    saveDownloadHistory([completed])
+    addDownloadHistory(completed)
+    saveDownloads([completed, ...[]])
 
     return completed
   } catch (error) {
@@ -148,7 +171,8 @@ export async function downloadFromUrl(
 }
 
 export function createDownloadItem(
-  partial: Partial<DownloadItem> & Pick<DownloadItem, 'id' | 'title'>,
+  partial: Partial<DownloadItem> &
+    Pick<DownloadItem, 'id' | 'title'>,
 ): DownloadItem {
   return {
     id: partial.id,
@@ -158,14 +182,18 @@ export function createDownloadItem(
     source: partial.source || 'url',
     sourceUrl: partial.sourceUrl || '',
     format: partial.format || 'mp3',
-    quality: partial.quality || '320kbps',
-    status: partial.status || 'waiting',
+    quality:
+      partial.quality || '320kbps',
+    status:
+      partial.status || 'waiting',
     progress: partial.progress || 0,
     size: partial.size || 0,
     fileName: partial.fileName || '',
-    createdAt: partial.createdAt || Date.now(),
+    createdAt:
+      partial.createdAt || Date.now(),
     completedAt: partial.completedAt,
     blobUrl: partial.blobUrl,
     error: partial.error,
+    spotifyId: partial.spotifyId,
   }
 }
