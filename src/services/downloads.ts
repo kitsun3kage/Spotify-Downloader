@@ -1,138 +1,171 @@
-function sanitizeFileName(name: string): string {
-  return name
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 160) || 'download';
-}
+import type { DownloadItem } from '../types/download'
+import {
+  addToHistory,
+  saveDownloadHistory,
+} from './storage'
 
-function extensionFromContentType(
-  contentType: string
-): string {
-  const normalized = contentType.toLowerCase();
-
-  if (normalized.includes('mpeg')) {
-    return 'mp3';
-  }
-
-  if (normalized.includes('wav')) {
-    return 'wav';
-  }
-
-  if (normalized.includes('ogg')) {
-    return 'ogg';
-  }
-
-  if (normalized.includes('webm')) {
-    return 'webm';
-  }
-
-  if (normalized.includes('mp4')) {
-    return 'm4a';
-  }
-
-  return 'bin';
-}
-
-export async function downloadLegalFile(
+export async function downloadFromUrl(
+  item: DownloadItem,
   url: string,
-  fileName: string,
-  onProgress: (progress: number) => void
-): Promise<void> {
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(
-      `Download failed with status ${response.status}.`
-    );
+  onUpdate?: (item: DownloadItem) => void,
+): Promise<DownloadItem> {
+  const update = (next: DownloadItem) => {
+    onUpdate?.(next)
   }
 
-  const total = Number(
-    response.headers.get('content-length') ?? 0
-  );
-
-  const contentType =
-    response.headers.get('content-type') ?? '';
-
-  const reader = response.body?.getReader();
-
-  if (!reader) {
-    const blob = await response.blob();
-
-    saveBlob(
-      blob,
-      `${sanitizeFileName(fileName)}.${extensionFromContentType(
-        contentType
-      )}`
-    );
-
-    onProgress(100);
-
-    return;
-  }
-
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-
-  while (true) {
-    const { done, value } =
-      await reader.read();
-
-    if (done) {
-      break;
+  if (!url) {
+    const failed: DownloadItem = {
+      ...item,
+      status: 'failed',
+      error: 'Brak adresu URL.',
     }
 
-    if (value) {
-      chunks.push(value);
-      received += value.length;
+    update(failed)
+    return failed
+  }
 
-      if (total > 0) {
-        onProgress(
-          Math.min(
-            100,
-            Math.round(
-              (received / total) * 100
-            )
-          )
-        );
+  try {
+    const downloading: DownloadItem = {
+      ...item,
+      status: 'downloading',
+      progress: 0,
+      error: undefined,
+    }
+
+    update(downloading)
+
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}: ${response.statusText}`,
+      )
+    }
+
+    const contentType =
+      response.headers.get('content-type') ||
+      'application/octet-stream'
+
+    const contentLength = Number(
+      response.headers.get('content-length') || 0,
+    )
+
+    let blob: Blob
+
+    if (response.body) {
+      const reader = response.body.getReader()
+      const chunks: Uint8Array[] = []
+
+      let received = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) {
+          break
+        }
+
+        if (value) {
+          chunks.push(value)
+          received += value.byteLength
+
+          const progress = contentLength
+            ? Math.min(
+                100,
+                Math.round(
+                  (received / contentLength) * 100,
+                ),
+              )
+            : 0
+
+          update({
+            ...downloading,
+            progress,
+          })
+        }
       }
+
+      const totalLength = chunks.reduce(
+        (total, chunk) => total + chunk.byteLength,
+        0,
+      )
+
+      const merged = new Uint8Array(totalLength)
+
+      let offset = 0
+
+      for (const chunk of chunks) {
+        merged.set(chunk, offset)
+        offset += chunk.byteLength
+      }
+
+      const buffer = merged.buffer.slice(
+        merged.byteOffset,
+        merged.byteOffset + merged.byteLength,
+      )
+
+      blob = new Blob([buffer], {
+        type: contentType,
+      })
+    } else {
+      blob = await response.blob()
     }
+
+    const blobUrl = URL.createObjectURL(blob)
+
+    const completed: DownloadItem = {
+      ...downloading,
+      status: 'completed',
+      progress: 100,
+      blobUrl,
+      size: blob.size,
+      completedAt: Date.now(),
+      error: undefined,
+    }
+
+    update(completed)
+
+    addToHistory(completed)
+    saveDownloadHistory([completed])
+
+    return completed
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Nieznany błąd pobierania.'
+
+    const failed: DownloadItem = {
+      ...item,
+      status: 'failed',
+      error: message,
+    }
+
+    update(failed)
+
+    return failed
   }
-
-  const blob = new Blob(chunks, {
-    type: contentType || 'application/octet-stream'
-  });
-
-  saveBlob(
-    blob,
-    `${sanitizeFileName(fileName)}.${extensionFromContentType(
-      contentType
-    )}`
-  );
-
-  onProgress(100);
 }
 
-function saveBlob(
-  blob: Blob,
-  fileName: string
-): void {
-  const objectUrl =
-    URL.createObjectURL(blob);
-
-  const anchor =
-    document.createElement('a');
-
-  anchor.href = objectUrl;
-  anchor.download = fileName;
-  anchor.rel = 'noopener';
-
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-
-  window.setTimeout(
-    () => URL.revokeObjectURL(objectUrl),
-    1000
-  );
+export function createDownloadItem(
+  partial: Partial<DownloadItem> & Pick<DownloadItem, 'id' | 'title'>,
+): DownloadItem {
+  return {
+    id: partial.id,
+    title: partial.title,
+    artist: partial.artist || '',
+    album: partial.album || '',
+    source: partial.source || 'url',
+    sourceUrl: partial.sourceUrl || '',
+    format: partial.format || 'mp3',
+    quality: partial.quality || '320kbps',
+    status: partial.status || 'waiting',
+    progress: partial.progress || 0,
+    size: partial.size || 0,
+    fileName: partial.fileName || '',
+    createdAt: partial.createdAt || Date.now(),
+    completedAt: partial.completedAt,
+    blobUrl: partial.blobUrl,
+    error: partial.error,
+  }
 }
