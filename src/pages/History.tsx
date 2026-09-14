@@ -9,8 +9,8 @@ import {
 
 import type { DownloadItem } from '../types/download'
 import {
-  clearHistory,
-  getHistory,
+  clearDownloadHistory,
+  getDownloadHistory,
 } from '../services/storage'
 
 function formatDate(timestamp?: number): string {
@@ -30,26 +30,32 @@ function formatSize(bytes?: number): string {
   }
 
   const units = ['B', 'KB', 'MB', 'GB']
-  let value = bytes
-  let unitIndex = 0
 
-  while (value >= 1024 && unitIndex < units.length - 1) {
+  let value = bytes
+  let index = 0
+
+  while (
+    value >= 1024 &&
+    index < units.length - 1
+  ) {
     value /= 1024
-    unitIndex += 1
+    index += 1
   }
 
-  return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unitIndex]}`
+  return `${value.toFixed(value >= 100 ? 0 : 1)} ${
+    units[index]
+  }`
 }
 
-export default function History() {
+export function History() {
   const [items, setItems] = useState<DownloadItem[]>([])
 
   useEffect(() => {
-    setItems(getHistory())
+    setItems(getDownloadHistory())
   }, [])
 
   const handleClear = () => {
-    clearHistory()
+    clearDownloadHistory()
     setItems([])
   }
 
@@ -58,9 +64,11 @@ export default function History() {
       <div className="page-header">
         <div>
           <span className="eyebrow">ACTIVITY</span>
+
           <h1>Historia</h1>
+
           <p>
-            Lista ostatnio dodanych i przetwarzanych plików.
+            Lista ostatnio przetwarzanych plików.
           </p>
         </div>
 
@@ -85,29 +93,35 @@ export default function History() {
           <h2>Brak historii</h2>
 
           <p>
-            Twoja historia pobierania pojawi się tutaj.
+            Historia pobierania pojawi się tutaj.
           </p>
         </section>
       ) : (
         <section className="history-list">
           {items.map((item: DownloadItem) => (
-            <article className="history-card" key={item.id}>
+            <article
+              className="history-card"
+              key={item.id}
+            >
               <div className="history-icon">
                 <FileAudio size={22} />
               </div>
 
               <div className="history-content">
-                <h3>{item.title || 'Bez nazwy'}</h3>
+                <h3>
+                  {item.title || 'Bez nazwy'}
+                </h3>
 
                 <div className="history-meta">
                   <span>
-                    {item.artist || 'Nieznany wykonawca'}
+                    {item.artist ||
+                      'Nieznany wykonawca'}
                   </span>
 
                   <span>•</span>
 
                   <span>
-                    {item.format?.toUpperCase() || 'AUDIO'}
+                    {item.format.toUpperCase()}
                   </span>
 
                   <span>•</span>
@@ -118,7 +132,10 @@ export default function History() {
                 </div>
 
                 <div className="history-date">
-                  {formatDate(item.completedAt || item.createdAt)}
+                  {formatDate(
+                    item.completedAt ||
+                      item.createdAt,
+                  )}
                 </div>
               </div>
 
@@ -138,7 +155,9 @@ export default function History() {
                 {item.blobUrl && (
                   <a
                     href={item.blobUrl}
-                    download={item.fileName || 'audio'}
+                    download={
+                      item.fileName || 'audio'
+                    }
                     className="icon-button"
                     aria-label="Pobierz plik"
                   >
@@ -153,3 +172,5 @@ export default function History() {
     </main>
   )
 }
+
+export default History
