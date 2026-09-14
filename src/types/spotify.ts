@@ -130,10 +130,10 @@ export interface SpotifyProfile {
 }
 
 export interface SpotifyToken {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-  refresh_token?: string;
-  scope: string;
-  expires_at: number;
+  access_token: string
+  token_type: string
+  expires_in: number
+  expires_at: number
+  refresh_token?: string
+  scope?: string
 }
