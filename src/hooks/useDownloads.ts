@@ -125,10 +125,12 @@ export function useDownloads() {
       )
 
       try {
+        /*
+         * downloadLegalFile() w obecnym services/downloads.ts
+         * przyjmuje cały DownloadItem jako pierwszy argument.
+         */
         const result = await downloadLegalFile(
-          item.sourceUrl,
-          item.fileName ??
-            `${item.artist ? `${item.artist} - ` : ''}${item.title}`,
+          item,
           (progress: number) => {
             setDownloads((current) =>
               current.map((download) =>
@@ -284,7 +286,7 @@ export function useDownloads() {
   )
 
   /*
-   * Compatibility with the current App.tsx
+   * Compatibility API for App.tsx
    */
 
   const start = useCallback(
@@ -312,12 +314,12 @@ export function useDownloads() {
   return {
     downloads,
 
-    // API używane przez App.tsx
+    // Compatibility with App.tsx
     items: downloads,
     start,
     cancel,
 
-    // Pełne API
+    // Full API
     addDownload,
     startDownload,
     pauseDownload,
