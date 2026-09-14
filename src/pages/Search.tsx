@@ -1,9 +1,12 @@
 import {
-  Disc3,
-  ListMusic,
+  ArrowRight,
+  Download,
+  ExternalLink,
+  LoaderCircle,
   Music2,
-  UserRound
-} from 'lucide-react';
+  Search,
+  X,
+} from 'lucide-react'
 
 import { useState } from 'react';
 
