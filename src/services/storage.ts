@@ -1,11 +1,11 @@
-import type { DownloadItem } from '../types/download'
 import type { AppSettings } from '../types/app'
+import type { DownloadItem } from '../types/download'
 
 const keys = {
   downloads: 'spotify-downloader-downloads',
-  history: 'spotify-downloader-history',
+  searchHistory: 'spotify-downloader-search-history',
   settings: 'spotify-downloader-settings',
-  accessToken: 'spotify-downloader-access-token',
+  spotifyToken: 'spotify-downloader-access-token',
   refreshToken: 'spotify-downloader-refresh-token',
   tokenExpiresAt: 'spotify-downloader-token-expires-at',
 } as const
@@ -28,72 +28,127 @@ function writeJson<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-export function getDownloadHistory(): DownloadItem[] {
+/* -------------------------------------------------------------------------- */
+/* Downloads                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export function getDownloads(): DownloadItem[] {
   return readJson<DownloadItem[]>(keys.downloads, [])
 }
 
-export function saveDownloadHistory(items: DownloadItem[]): void {
-  const serializableItems = items.slice(0, 100).map((item) => {
-    const { blobUrl: _blobUrl, ...rest } = item
-    return rest
-  })
+export function saveDownloads(items: DownloadItem[]): void {
+  const serializable = items.map(({ blobUrl: _blobUrl, ...item }) => item)
 
-  writeJson(keys.downloads, serializableItems)
+  writeJson(keys.downloads, serializable)
+}
+
+export function addDownloadHistory(item: DownloadItem): void {
+  const downloads = getDownloads()
+
+  const existing = downloads.filter(
+    (entry) => entry.id !== item.id,
+  )
+
+  saveDownloads([item, ...existing].slice(0, 100))
+}
+
+export function getDownloadHistory(): DownloadItem[] {
+  return getDownloads()
+}
+
+export function saveDownloadHistory(items: DownloadItem[]): void {
+  saveDownloads(items)
 }
 
 export function clearDownloadHistory(): void {
   localStorage.removeItem(keys.downloads)
 }
 
-export function getHistory(): DownloadItem[] {
-  return readJson<DownloadItem[]>(keys.history, [])
+/* -------------------------------------------------------------------------- */
+/* Search history                                                             */
+/* -------------------------------------------------------------------------- */
+
+export function getSearchHistory(): string[] {
+  return readJson<string[]>(keys.searchHistory, [])
 }
 
-export function saveHistory(items: DownloadItem[]): void {
-  const serializableItems = items.slice(0, 100).map((item) => {
-    const { blobUrl: _blobUrl, ...rest } = item
-    return rest
-  })
-
-  writeJson(keys.history, serializableItems)
+export function saveSearchHistory(items: string[]): void {
+  writeJson(
+    keys.searchHistory,
+    Array.from(new Set(items)).slice(0, 50),
+  )
 }
 
-export function addToHistory(item: DownloadItem): void {
-  const history = getHistory()
+export function addSearchHistory(query: string): void {
+  const trimmed = query.trim()
 
-  const filtered = history.filter((entry) => entry.id !== item.id)
+  if (!trimmed) {
+    return
+  }
 
-  saveHistory([item, ...filtered])
+  const history = getSearchHistory()
+
+  saveSearchHistory([
+    trimmed,
+    ...history.filter(
+      (item) => item.toLowerCase() !== trimmed.toLowerCase(),
+    ),
+  ])
 }
 
-export function clearHistory(): void {
-  localStorage.removeItem(keys.history)
+export function clearSearchHistory(): void {
+  localStorage.removeItem(keys.searchHistory)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Settings                                                                   */
+/* -------------------------------------------------------------------------- */
+
+const defaultSettings: AppSettings = {
+  autoStartDownloads: true,
+  concurrentDownloads: 3,
+  defaultFormat: 'mp3',
+  defaultQuality: '320kbps',
+  theme: 'dark',
 }
 
 export function getSettings(): AppSettings {
-  return readJson<AppSettings>(keys.settings, {
-    autoStartDownloads: true,
-    concurrentDownloads: 3,
-    defaultFormat: 'mp3',
-    defaultQuality: '320kbps',
-    theme: 'dark',
-  })
+  return readJson<AppSettings>(
+    keys.settings,
+    defaultSettings,
+  )
 }
 
 export function saveSettings(settings: AppSettings): void {
   writeJson(keys.settings, settings)
 }
 
+/* -------------------------------------------------------------------------- */
+/* Spotify OAuth                                                              */
+/* -------------------------------------------------------------------------- */
+
+export function getSpotifyToken(): string | null {
+  return localStorage.getItem(keys.spotifyToken)
+}
+
+export function saveSpotifyToken(token: string): void {
+  localStorage.setItem(keys.spotifyToken, token)
+}
+
+export function clearSpotifyToken(): void {
+  localStorage.removeItem(keys.spotifyToken)
+}
+
 export function getAccessToken(): string | null {
-  return localStorage.getItem(keys.accessToken)
+  return getSpotifyToken()
 }
 
 export function saveAccessToken(token: string): void {
-  localStorage.setItem(keys.accessToken, token)
+  saveSpotifyToken(token)
 }
 
 export function removeAccessToken(): void {
-  localStorage.removeItem(keys.accessToken)
+  clearSpotifyToken()
 }
 
 export function getRefreshToken(): string | null {
@@ -115,17 +170,22 @@ export function getTokenExpiresAt(): number {
     return 0
   }
 
-  const parsed = Number(value)
+  const timestamp = Number(value)
 
-  return Number.isFinite(parsed) ? parsed : 0
+  return Number.isFinite(timestamp)
+    ? timestamp
+    : 0
 }
 
 export function saveTokenExpiresAt(timestamp: number): void {
-  localStorage.setItem(keys.tokenExpiresAt, String(timestamp))
+  localStorage.setItem(
+    keys.tokenExpiresAt,
+    String(timestamp),
+  )
 }
 
 export function clearSpotifyTokens(): void {
-  removeAccessToken()
+  clearSpotifyToken()
   removeRefreshToken()
   localStorage.removeItem(keys.tokenExpiresAt)
 }
