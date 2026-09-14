@@ -1,25 +1,30 @@
-export type Page =
+import type {
+  AudioFormat,
+  AudioQuality,
+} from './download'
+
+export type Theme = 'dark' | 'light' | 'system'
+
+export interface AppSettings {
+  autoStartDownloads: boolean
+  concurrentDownloads: number
+  defaultFormat: AudioFormat
+  defaultQuality: AudioQuality
+  theme: Theme
+}
+
+export type AppScreen =
   | 'home'
   | 'search'
   | 'playlists'
   | 'downloads'
   | 'history'
-  | 'settings';
+  | 'settings'
 
-export type Appearance = 'dark' | 'light' | 'system';
-
-export interface AppSettings {
-  appearance: Appearance;
-  downloadFormat: 'mp3' | 'wav' | 'original';
-  concurrentDownloads: number;
-  autoStartDownloads: boolean;
-  autoplay: boolean;
-  volume: number;
-  rememberPosition: boolean;
-}
-
-export interface SearchHistoryItem {
-  id: string;
-  query: string;
-  createdAt: number;
-}
+export type BottomTab =
+  | 'home'
+  | 'search'
+  | 'playlists'
+  | 'downloads'
+  | 'history'
+  | 'settings'
