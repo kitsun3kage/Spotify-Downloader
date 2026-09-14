@@ -1,33 +1,47 @@
 export type DownloadStatus =
-  | 'Waiting'
-  | 'Downloading'
-  | 'Completed'
-  | 'Failed'
-  | 'Skipped'
-  | 'Cancelled';
+  | 'waiting'
+  | 'downloading'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled'
+  | 'paused'
+
+export type DownloadSource =
+  | 'spotify'
+  | 'url'
+  | 'local'
+
+export type AudioFormat =
+  | 'mp3'
+  | 'wav'
+  | 'original'
+
+export type AudioQuality =
+  | '128kbps'
+  | '192kbps'
+  | '256kbps'
+  | '320kbps'
+  | 'lossless'
 
 export interface DownloadItemData {
-  id: string;
-  title: string;
-  artist: string;
-  sourceUrl: string;
-  fileName: string;
-  progress: number;
-  status: DownloadStatus;
-  createdAt: number;
-  error?: string;
+  id: string
+  title: string
+  artist?: string
+  album?: string
+  source: DownloadSource
+  sourceUrl?: string
+  format: AudioFormat
+  quality?: AudioQuality
+  status: DownloadStatus
+  progress: number
+  size?: number
+  fileName?: string
+  createdAt: number
+  completedAt?: number
+  blobUrl?: string
+  error?: string
+  spotifyId?: string
 }
 
-export interface DownloadSettings {
-  format: 'mp3' | 'wav' | 'original';
-  concurrent: number;
-  autoStart: boolean;
-}
-
-export interface DownloadHistoryItem {
-  id: string;
-  title: string;
-  artist: string;
-  status: DownloadStatus;
-  createdAt: number;
-}
+export type DownloadItem = DownloadItemData
