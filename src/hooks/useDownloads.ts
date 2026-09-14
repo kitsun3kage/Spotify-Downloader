@@ -1,168 +1,369 @@
 import {
   useCallback,
   useEffect,
-  useState
-} from 'react';
+  useState,
+} from 'react'
 
-import {
-  downloadLegalFile
-} from '../services/downloads';
+import type { DownloadItem } from '../types/download'
 
 import {
   addDownloadHistory,
   getDownloads,
-  saveDownloads
-} from '../services/storage';
+  saveDownloads,
+} from '../services/storage'
 
-import type {
-  DownloadItemData
-} from '../types/download';
+import {
+  downloadLegalFile,
+} from '../services/downloads'
+
+interface CreateDownloadOptions {
+  id: string
+  title: string
+  artist?: string
+  album?: string
+  sourceUrl?: string
+  spotifyId?: string
+}
 
 export function useDownloads() {
-  const [items, setItems] =
-    useState<DownloadItemData[]>(
-      getDownloads()
-    );
+  const [downloads, setDownloads] =
+    useState<DownloadItem[]>(() =>
+      getDownloads(),
+    )
 
-  const persist =
-    useCallback(
-      (next: DownloadItemData[]) => {
-        setItems(next);
-        saveDownloads(next);
-      },
-      []
-    );
+  const updateDownloads = useCallback(
+    (
+      updater:
+        | DownloadItem[]
+        | ((
+            current: DownloadItem[],
+          ) => DownloadItem[]),
+    ) => {
+      setDownloads((current) => {
+        const next =
+          typeof updater === 'function'
+            ? updater(current)
+            : updater
+
+        saveDownloads(next)
+
+        return next
+      })
+    },
+    [],
+  )
 
   useEffect(() => {
-    saveDownloads(items);
-  }, [items]);
+    const stored =
+      getDownloads()
 
-  const add = useCallback(
+    setDownloads(stored)
+  }, [])
+
+  const addDownload = useCallback(
     (
-      data: Omit<
-        DownloadItemData,
-        'id' | 'progress' | 'status' | 'createdAt'
-      >
-    ) => {
-      const item: DownloadItemData = {
-        ...data,
-        id: crypto.randomUUID(),
-        progress: 0,
+      options: CreateDownloadOptions,
+    ): DownloadItem => {
+      const item: DownloadItem = {
+        id: options.id,
+
+        title:
+          options.title,
+
+        artist:
+          options.artist || '',
+
+        album:
+          options.album || '',
+
+        source: 'url',
+
+        sourceUrl:
+          options.sourceUrl || '',
+
+        spotifyId:
+          options.spotifyId,
+
+        format: 'mp3',
+
+        quality: '320kbps',
+
         status: 'Waiting',
-        createdAt: Date.now()
-      };
 
-      persist([item, ...items]);
-
-      return item;
-    },
-    [items, persist]
-  );
-
-  const update = useCallback(
-    (
-      id: string,
-      patch: Partial<DownloadItemData>
-    ) => {
-      persist(
-        items.map((item) =>
-          item.id === id
-            ? { ...item, ...patch }
-            : item
-        )
-      );
-    },
-    [items, persist]
-  );
-
-  const start = useCallback(
-    async (id: string) => {
-      const item =
-        items.find(
-          (entry) => entry.id === id
-        );
-
-      if (!item) {
-        return;
-      }
-
-      update(id, {
-        status: 'Downloading',
         progress: 0,
-        error: undefined
-      });
 
-      try {
-        await downloadLegalFile(
-          item.sourceUrl,
-          item.fileName,
-          (progress) => {
-            update(id, {
-              progress
-            });
-          }
-        );
+        size: 0,
 
-        update(id, {
-          status: 'Completed',
-          progress: 100
-        });
+        fileName:
+          options.title
+            ? `${options.title}.mp3`
+            : 'audio.mp3',
 
-        addDownloadHistory({
-          id: item.id,
-          title: item.title,
-          artist: item.artist,
-          status: 'Completed',
-          createdAt: Date.now()
-        });
-      } catch (cause) {
-        const message =
-          cause instanceof Error
-            ? cause.message
-            : 'Download failed.';
-
-        update(id, {
-          status: 'Failed',
-          error: message
-        });
-
-        addDownloadHistory({
-          id: item.id,
-          title: item.title,
-          artist: item.artist,
-          status: 'Failed',
-          createdAt: Date.now()
-        });
+        createdAt:
+          Date.now(),
       }
-    },
-    [items, update]
-  );
 
-  const cancel = useCallback(
-    (id: string) => {
-      update(id, {
-        status: 'Cancelled'
-      });
+      updateDownloads(
+        (current) => [
+          item,
+          ...current.filter(
+            (existing) =>
+              existing.id !==
+              item.id,
+          ),
+        ],
+      )
+
+      return item
     },
-    [update]
-  );
+    [updateDownloads],
+  )
+
+  const startDownload =
+    useCallback(
+      async (
+        item: DownloadItem,
+      ) => {
+        if (!item.sourceUrl) {
+          const failed: DownloadItem = {
+            ...item,
+            status: 'Failed',
+            error:
+              'Brak adresu źródłowego.',
+          }
+
+          updateDownloads(
+            (current) =>
+              current.map(
+                (existing) =>
+                  existing.id ===
+                  item.id
+                    ? failed
+                    : existing,
+              ),
+          )
+
+          return failed
+        }
+
+        const downloading: DownloadItem = {
+          ...item,
+          status: 'Downloading',
+          progress: 0,
+          error: undefined,
+        }
+
+        updateDownloads(
+          (current) =>
+            current.map(
+              (existing) =>
+                existing.id ===
+                item.id
+                  ? downloading
+                  : existing,
+            ),
+        )
+
+        try {
+          const result =
+            await downloadLegalFile(
+              downloading,
+              downloading.sourceUrl,
+              (progress: number) => {
+                updateDownloads(
+                  (current) =>
+                    current.map(
+                      (existing) =>
+                        existing.id ===
+                        item.id
+                          ? {
+                              ...existing,
+                              status:
+                                'Downloading',
+                              progress,
+                            }
+                          : existing,
+                    ),
+                )
+              },
+            )
+
+          updateDownloads(
+            (current) =>
+              current.map(
+                (existing) =>
+                  existing.id ===
+                  item.id
+                    ? result
+                    : existing,
+              ),
+          )
+
+          if (
+            result.status ===
+            'Completed'
+          ) {
+            addDownloadHistory(
+              result,
+            )
+          }
+
+          return result
+        } catch (error) {
+          const failed: DownloadItem = {
+            ...item,
+            status: 'Failed',
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Nieznany błąd.',
+          }
+
+          updateDownloads(
+            (current) =>
+              current.map(
+                (existing) =>
+                  existing.id ===
+                  item.id
+                    ? failed
+                    : existing,
+              ),
+          )
+
+          return failed
+        }
+      },
+      [updateDownloads],
+    )
+
+  const pauseDownload =
+    useCallback(
+      (id: string) => {
+        updateDownloads(
+          (current) =>
+            current.map(
+              (item) =>
+                item.id === id &&
+                item.status ===
+                  'Downloading'
+                  ? {
+                      ...item,
+                      status: 'Paused',
+                    }
+                  : item,
+            ),
+        )
+      },
+      [updateDownloads],
+    )
+
+  const resumeDownload =
+    useCallback(
+      async (id: string) => {
+        const item =
+          downloads.find(
+            (entry) =>
+              entry.id === id,
+          )
+
+        if (!item) {
+          return
+        }
+
+        await startDownload(
+          item,
+        )
+      },
+      [downloads, startDownload],
+    )
+
+  const cancelDownload =
+    useCallback(
+      (id: string) => {
+        updateDownloads(
+          (current) =>
+            current.map(
+              (item) =>
+                item.id === id
+                  ? {
+                      ...item,
+                      status:
+                        'Cancelled',
+                    }
+                  : item,
+            ),
+        )
+      },
+      [updateDownloads],
+    )
+
+  const removeDownload =
+    useCallback(
+      (id: string) => {
+        updateDownloads(
+          (current) =>
+            current.filter(
+              (item) =>
+                item.id !== id,
+            ),
+        )
+      },
+      [updateDownloads],
+    )
 
   const clearCompleted =
     useCallback(() => {
-      persist(
-        items.filter(
-          (item) =>
-            item.status !== 'Completed'
+      updateDownloads(
+        (current) =>
+          current.filter(
+            (item) =>
+              item.status !==
+              'Completed',
+          ),
+      )
+    }, [updateDownloads])
+
+  const retryDownload =
+    useCallback(
+      async (id: string) => {
+        const item =
+          downloads.find(
+            (entry) =>
+              entry.id === id,
+          )
+
+        if (!item) {
+          return
+        }
+
+        await startDownload(
+          item,
         )
-      );
-    }, [items, persist]);
+      },
+      [downloads, startDownload],
+    )
 
   return {
-    items,
-    add,
-    update,
-    start,
-    cancel,
-    clearCompleted
-  };
+    downloads,
+
+    addDownload,
+
+    startDownload,
+
+    pauseDownload,
+
+    resumeDownload,
+
+    cancelDownload,
+
+    removeDownload,
+
+    clearCompleted,
+
+    retryDownload,
+
+    updateDownloads,
+  }
 }
+
+export default useDownloads
