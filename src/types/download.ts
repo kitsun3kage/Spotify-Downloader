@@ -1,11 +1,11 @@
 export type DownloadStatus =
-  | 'waiting'
-  | 'downloading'
-  | 'completed'
-  | 'failed'
-  | 'skipped'
-  | 'cancelled'
-  | 'paused'
+  | 'Waiting'
+  | 'Downloading'
+  | 'Completed'
+  | 'Failed'
+  | 'Skipped'
+  | 'Cancelled'
+  | 'Paused'
 
 export type DownloadSource =
   | 'spotify'
@@ -26,21 +26,37 @@ export type AudioQuality =
 
 export interface DownloadItemData {
   id: string
+
   title: string
+
   artist?: string
+
   album?: string
+
   source: DownloadSource
+
   sourceUrl?: string
+
   format: AudioFormat
+
   quality?: AudioQuality
+
   status: DownloadStatus
+
   progress: number
+
   size?: number
+
   fileName?: string
+
   createdAt: number
+
   completedAt?: number
+
   blobUrl?: string
+
   error?: string
+
   spotifyId?: string
 }
 
