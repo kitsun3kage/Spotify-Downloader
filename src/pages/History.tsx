@@ -1,160 +1,155 @@
+import { useEffect, useState } from 'react'
 import {
   Clock3,
-  Search,
-  Trash2
-} from 'lucide-react';
+  Download,
+  ExternalLink,
+  FileAudio,
+  Trash2,
+} from 'lucide-react'
 
+import type { DownloadItem } from '../types/download'
 import {
-  useState
-} from 'react';
+  clearHistory,
+  getHistory,
+} from '../services/storage'
 
-import {
-  clearDownloadHistory,
-  clearSearchHistory,
-  getDownloadHistory,
-  getSearchHistory
-} from '../services/storage';
+function formatDate(timestamp?: number): string {
+  if (!timestamp) {
+    return 'Nieznana data'
+  }
 
-export function History() {
-  const [searchHistory, setSearchHistory] =
-    useState(getSearchHistory());
+  return new Intl.DateTimeFormat('pl-PL', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(timestamp))
+}
 
-  const [
-    downloadHistory,
-    setDownloadHistory
-  ] = useState(
-    getDownloadHistory()
-  );
+function formatSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) {
+    return '—'
+  }
 
-  const clearSearch = () => {
-    clearSearchHistory();
-    setSearchHistory([]);
-  };
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let unitIndex = 0
 
-  const clearDownloads = () => {
-    clearDownloadHistory();
-    setDownloadHistory([]);
-  };
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+
+  return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+export default function History() {
+  const [items, setItems] = useState<DownloadItem[]>([])
+
+  useEffect(() => {
+    setItems(getHistory())
+  }, [])
+
+  const handleClear = () => {
+    clearHistory()
+    setItems([])
+  }
 
   return (
-    <div className="page">
-      <div className="page-heading">
+    <main className="page">
+      <div className="page-header">
         <div>
-          <span className="section-kicker">
-            ACTIVITY
-          </span>
-          <h2>History</h2>
+          <span className="eyebrow">ACTIVITY</span>
+          <h1>Historia</h1>
+          <p>
+            Lista ostatnio dodanych i przetwarzanych plików.
+          </p>
         </div>
+
+        {items.length > 0 && (
+          <button
+            type="button"
+            className="button button-danger"
+            onClick={handleClear}
+          >
+            <Trash2 size={17} />
+            Wyczyść historię
+          </button>
+        )}
       </div>
 
-      <div className="history-grid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <span className="section-kicker">
-                SEARCH
-              </span>
-              <h2>Search History</h2>
-            </div>
-
-            <button
-              className="icon-button"
-              type="button"
-              onClick={clearSearch}
-              title="Clear search history"
-            >
-              <Trash2 size={17} />
-            </button>
+      {items.length === 0 ? (
+        <section className="empty-state">
+          <div className="empty-icon">
+            <Clock3 size={28} />
           </div>
 
-          {searchHistory.length === 0 ? (
-            <div className="empty-state compact">
-              <Search size={24} />
-              <span>
-                No searches yet.
-              </span>
-            </div>
-          ) : (
-            <div className="history-list">
-              {searchHistory.map(
-                (item) => (
-                  <div
-                    className="history-item"
-                    key={item.id}
-                  >
-                    <Search size={16} />
-                    <span>
-                      {item.query}
-                    </span>
-                    <small>
-                      {new Date(
-                        item.createdAt
-                      ).toLocaleDateString()}
-                    </small>
-                  </div>
-                )
-              )}
-            </div>
-          )}
+          <h2>Brak historii</h2>
+
+          <p>
+            Twoja historia pobierania pojawi się tutaj.
+          </p>
         </section>
+      ) : (
+        <section className="history-list">
+          {items.map((item: DownloadItem) => (
+            <article className="history-card" key={item.id}>
+              <div className="history-icon">
+                <FileAudio size={22} />
+              </div>
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <span className="section-kicker">
-                DOWNLOADS
-              </span>
-              <h2>
-                Download History
-              </h2>
-            </div>
+              <div className="history-content">
+                <h3>{item.title || 'Bez nazwy'}</h3>
 
-            <button
-              className="icon-button"
-              type="button"
-              onClick={clearDownloads}
-              title="Clear download history"
-            >
-              <Trash2 size={17} />
-            </button>
-          </div>
+                <div className="history-meta">
+                  <span>
+                    {item.artist || 'Nieznany wykonawca'}
+                  </span>
 
-          {downloadHistory.length === 0 ? (
-            <div className="empty-state compact">
-              <Clock3 size={24} />
-              <span>
-                No download history yet.
-              </span>
-            </div>
-          ) : (
-            <div className="history-list">
-              {downloadHistory.map(
-                (item) => (
-                  <div
-                    className="history-item"
-                    key={`${item.id}-${item.createdAt}`}
+                  <span>•</span>
+
+                  <span>
+                    {item.format?.toUpperCase() || 'AUDIO'}
+                  </span>
+
+                  <span>•</span>
+
+                  <span>
+                    {formatSize(item.size)}
+                  </span>
+                </div>
+
+                <div className="history-date">
+                  {formatDate(item.completedAt || item.createdAt)}
+                </div>
+              </div>
+
+              <div className="history-actions">
+                {item.sourceUrl && (
+                  <a
+                    href={item.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="icon-button"
+                    aria-label="Otwórz źródło"
                   >
-                    <Clock3 size={16} />
+                    <ExternalLink size={18} />
+                  </a>
+                )}
 
-                    <div>
-                      <strong>
-                        {item.title}
-                      </strong>
-                      <span>
-                        {item.artist}
-                      </span>
-                    </div>
-
-                    <small>
-                      {item.status}
-                    </small>
-                  </div>
-                )
-              )}
-            </div>
-          )}
+                {item.blobUrl && (
+                  <a
+                    href={item.blobUrl}
+                    download={item.fileName || 'audio'}
+                    className="icon-button"
+                    aria-label="Pobierz plik"
+                  >
+                    <Download size={18} />
+                  </a>
+                )}
+              </div>
+            </article>
+          ))}
         </section>
-      </div>
-    </div>
-  );
+      )}
+    </main>
+  )
 }
